@@ -65,14 +65,30 @@ class TrainingComponents:
     is_sdxl: bool
 
 
-def load_base_model(config: SiteoraConfig, accel_info: AcceleratorInfo) -> TrainingComponents:
+def load_base_model(
+    config: SiteoraConfig, accel_info: AcceleratorInfo, dtype: torch.dtype = torch.float32
+) -> TrainingComponents:
+    """Load the base model's components directly at `dtype` for the frozen,
+    memory-heavy pieces (text encoders, UNet).
+
+    On a 16GB T4, SDXL's fp32 weights (text_encoder_2 ~2.7GB + UNet ~10.5GB +
+    text_encoder ~0.5GB + VAE ~0.3GB) already total close to the full VRAM
+    budget on their own, before any activations, optimizer state, or LoRA
+    params. Loading fp32 then casting to fp16 afterward briefly holds BOTH
+    copies in memory per tensor, which reliably OOMs on a T4. Loading
+    directly at `dtype` (the training mixed-precision dtype) avoids that
+    doubling. The VAE is the one exception — it is always loaded in fp32
+    (see `train()`), matching standard SDXL practice for numerical stability.
+    """
     model_id = config.model.base_model
     revision = config.model.revision
     is_sdxl = "xl" in model_id.lower()
 
     tokenizer_one = AutoTokenizer.from_pretrained(model_id, subfolder="tokenizer", revision=revision, use_fast=False)
     text_encoder_cls_one = _import_text_encoder_class(model_id, revision, "text_encoder")
-    text_encoder_one = text_encoder_cls_one.from_pretrained(model_id, subfolder="text_encoder", revision=revision)
+    text_encoder_one = text_encoder_cls_one.from_pretrained(
+        model_id, subfolder="text_encoder", revision=revision, dtype=dtype
+    )
 
     tokenizer_two = None
     text_encoder_two = None
@@ -82,11 +98,11 @@ def load_base_model(config: SiteoraConfig, accel_info: AcceleratorInfo) -> Train
         )
         text_encoder_cls_two = _import_text_encoder_class(model_id, revision, "text_encoder_2")
         text_encoder_two = text_encoder_cls_two.from_pretrained(
-            model_id, subfolder="text_encoder_2", revision=revision
+            model_id, subfolder="text_encoder_2", revision=revision, dtype=dtype
         )
 
-    vae = AutoencoderKL.from_pretrained(model_id, subfolder="vae", revision=revision)
-    unet = UNet2DConditionModel.from_pretrained(model_id, subfolder="unet", revision=revision)
+    vae = AutoencoderKL.from_pretrained(model_id, subfolder="vae", revision=revision)  # always fp32, see docstring
+    unet = UNet2DConditionModel.from_pretrained(model_id, subfolder="unet", revision=revision, dtype=dtype)
     noise_scheduler = DDPMScheduler.from_pretrained(model_id, subfolder="scheduler")
 
     # Freeze everything; only LoRA adapter params on the UNet will train.
@@ -250,20 +266,22 @@ def train(config: SiteoraConfig, resume: bool = True) -> Path:
         project_dir=config.paths.log_dir,
     )
 
-    components = load_base_model(config, accel_info)
-    components.unet = attach_lora(components.unet, config)
-
     weight_dtype = torch.float32
     if accelerator.mixed_precision == "fp16":
         weight_dtype = torch.float16
     elif accelerator.mixed_precision == "bf16":
         weight_dtype = torch.bfloat16
 
+    # Load text encoders + UNet directly at weight_dtype (see load_base_model's
+    # docstring for why this matters on a 16GB T4) — only the VAE is always fp32.
+    components = load_base_model(config, accel_info, dtype=weight_dtype)
+    components.unet = attach_lora(components.unet, config)
+
     components.vae.to(accelerator.device, dtype=torch.float32)  # VAE stays fp32 for stability
-    components.text_encoder_one.to(accelerator.device, dtype=weight_dtype)
+    components.text_encoder_one.to(accelerator.device)
     if components.text_encoder_two is not None:
-        components.text_encoder_two.to(accelerator.device, dtype=weight_dtype)
-    components.unet.to(accelerator.device, dtype=weight_dtype)
+        components.text_encoder_two.to(accelerator.device)
+    components.unet.to(accelerator.device)
     # Re-enable fp32 for LoRA params so gradients don't underflow in fp16.
     for p in components.unet.parameters():
         if p.requires_grad:
