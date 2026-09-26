@@ -44,6 +44,7 @@ PEXELS_API_URL = "https://api.pexels.com/v1/search"
 # up with what the model will be evaluated on. {alt} is filled in with
 # Pexels' own alt-text for the photo when available.
 DEFAULT_QUERIES: dict[str, str] = {
+    # --- original 10 ---
     "modern saas office": "a modern SaaS office interior, professional technology photography, {alt}",
     "restaurant interior luxury": "a luxury restaurant interior, warm ambient lighting, professional architectural photography, {alt}",
     "modern real estate house": "a modern luxury house exterior for a real estate website, professional architectural photography, {alt}",
@@ -54,6 +55,74 @@ DEFAULT_QUERIES: dict[str, str] = {
     "modern architecture building": "a striking modern architecture building, wide composition, {alt}",
     "professional business meeting": "a professional business meeting, corporate photography style, {alt}",
     "healthcare clinic modern": "a modern healthcare clinic interior, clean professional photography, {alt}",
+    # --- SaaS / technology / AI startups ---
+    "startup team coding": "a startup team working on laptops, modern tech office photography, {alt}",
+    "data center servers": "a modern data center with server racks, cool blue technology lighting, {alt}",
+    "coding on laptop closeup": "a close-up of code on a laptop screen, modern technology photography, {alt}",
+    "futuristic circuit board": "a futuristic glowing circuit board macro shot, technology background, {alt}",
+    "cloud computing network": "an abstract cloud computing network visualization, futuristic technology style, {alt}",
+    "software developer desk setup": "a clean modern software developer desk setup, minimal technology photography, {alt}",
+    "cybersecurity lock digital": "a digital cybersecurity concept with glowing lock icon, futuristic style, {alt}",
+    "robotics ai lab": "a modern robotics and AI research lab, clean futuristic photography, {alt}",
+    # --- finance ---
+    "modern bank office interior": "a modern bank office interior, professional corporate photography, {alt}",
+    "finance stock chart screen": "a financial stock chart on a screen, professional business photography, {alt}",
+    "business handshake office": "a professional handshake in a modern office, corporate photography style, {alt}",
+    "investment growth concept": "an abstract investment growth concept image, clean corporate style, {alt}",
+    # --- healthcare ---
+    "doctor patient consultation": "a doctor consulting with a patient, professional healthcare photography, {alt}",
+    "modern hospital hallway": "a clean modern hospital hallway, professional healthcare photography, {alt}",
+    "medical equipment closeup": "a close-up of modern medical equipment, clean clinical photography, {alt}",
+    # --- restaurants / food ---
+    "gourmet food plating": "a beautifully plated gourmet dish, professional food photography, {alt}",
+    "chef cooking kitchen": "a chef cooking in a professional restaurant kitchen, editorial food photography, {alt}",
+    "coffee shop cozy interior": "a cozy modern coffee shop interior, warm inviting photography, {alt}",
+    "outdoor restaurant patio": "an outdoor restaurant patio at golden hour, editorial photography, {alt}",
+    # --- hotels / travel ---
+    "luxury hotel lobby": "a luxury hotel lobby interior, elegant professional photography, {alt}",
+    "hotel room modern minimal": "a modern minimal hotel room interior, clean professional photography, {alt}",
+    "infinity pool resort": "an infinity pool at a luxury resort, scenic travel photography, {alt}",
+    "airplane window travel": "a view from an airplane window, travel photography style, {alt}",
+    "mountain landscape scenic": "a scenic mountain landscape, wide travel photography composition, {alt}",
+    # --- real estate / architecture ---
+    "modern apartment interior": "a modern minimalist apartment interior, professional architectural photography, {alt}",
+    "luxury living room interior": "a luxury living room interior, warm professional architectural photography, {alt}",
+    "glass office building exterior": "a modern glass office building exterior, wide architectural photography, {alt}",
+    "minimalist kitchen design": "a minimalist modern kitchen design, clean architectural photography, {alt}",
+    "rooftop city skyline": "a rooftop view of a city skyline at dusk, wide architectural photography, {alt}",
+    # --- e-commerce / product ---
+    "product on white background": "a professional product photograph on a clean white background, {alt}",
+    "flat lay product shot": "a flat lay product photography shot, minimal styled composition, {alt}",
+    "cosmetics product photography": "an elegant cosmetics product photography shot, studio lighting, {alt}",
+    "shoes product studio shot": "a pair of shoes on a clean studio background, product photography, {alt}",
+    "packaging design mockup": "a clean modern product packaging mockup, studio photography, {alt}",
+    # --- fashion / editorial ---
+    "fashion model street style": "a fashion model in street style clothing, editorial photography, {alt}",
+    "fashion accessories flatlay": "a fashion accessories flat lay, minimal editorial styling, {alt}",
+    "model portrait studio light": "a fashion model portrait with dramatic studio lighting, {alt}",
+    # --- professional services / agencies / portfolios ---
+    "creative agency workspace": "a creative agency workspace with designers collaborating, modern office photography, {alt}",
+    "lawyer office professional": "a professional lawyer's office interior, corporate photography style, {alt}",
+    "consultant presenting meeting": "a consultant presenting to a business team, corporate photography, {alt}",
+    "designer portfolio desk": "a designer's desk with a portfolio and sketches, creative workspace photography, {alt}",
+    # --- education ---
+    "modern classroom students": "a modern classroom with students learning, bright professional photography, {alt}",
+    "university campus building": "a university campus building exterior, wide architectural photography, {alt}",
+    "online learning laptop": "a person taking an online course on a laptop, modern lifestyle photography, {alt}",
+    # --- fitness ---
+    "modern gym interior": "a modern gym interior with equipment, clean fitness photography, {alt}",
+    "yoga studio calm interior": "a calm minimalist yoga studio interior, soft natural lighting, {alt}",
+    "person running outdoors": "a person running outdoors at sunrise, energetic fitness photography, {alt}",
+    # --- automotive ---
+    "luxury car studio shot": "a luxury car in a studio photography shot, dramatic lighting, {alt}",
+    "car driving mountain road": "a car driving along a scenic mountain road, cinematic automotive photography, {alt}",
+    "electric car charging": "an electric car charging at a modern charging station, clean technology photography, {alt}",
+    # --- abstract / backgrounds / 3D-style ---
+    "abstract gradient background": "a smooth abstract gradient background, modern minimal style, {alt}",
+    "geometric shapes 3d render": "an abstract 3D geometric shapes render, futuristic clean style, {alt}",
+    "minimal texture background": "a minimal textured background with soft lighting, clean modern style, {alt}",
+    "neon light abstract": "an abstract neon light photography composition, futuristic style, {alt}",
+    "nature abstract macro": "an abstract macro photograph of a natural texture, soft artistic style, {alt}",
 }
 
 LICENSE_NOTE = (
