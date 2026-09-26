@@ -1,0 +1,27 @@
+# Core ML stack. Versions pinned to what was actually tested during
+# development of this repo (CPU, local dev machine) — Colab installs
+# the CUDA build of torch/torchvision/torchaudio instead (see colab
+# notebooks, which pin CUDA wheels explicitly).
+torch==2.9.1
+torchvision==0.24.1
+torchaudio==2.9.1
+
+diffusers==0.40.0
+transformers==5.17.0
+peft==0.21.0
+accelerate==1.15.0
+safetensors>=0.4.0
+
+# Memory-efficient optimizer for T4 (8-bit Adam). CUDA-only; not needed/used
+# on CPU or TPU paths.
+bitsandbytes>=0.43.0; sys_platform == "linux"
+
+pyyaml>=6.0
+pillow>=10.0
+numpy>=1.26
+tqdm>=4.66
+tensorboard>=2.16
+
+# TPU path (only installed/used when a TPU runtime is detected; see
+# colab/train_lora.ipynb Cell 1 which installs this conditionally).
+# torch_xla==2.9.0

@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+
+# ML artifacts (large / regenerable — never commit)
+outputs/
+checkpoints/
+models/
+samples/
+evaluations/
+logs/
+*.safetensors
+*.ckpt
+*.bin
+*.pt
+
+# Dataset content (images can be large / licensed — keep the pipeline, not the pixels)
+dataset/images/
+dataset/*/images/
+dataset/metadata.jsonl
+dataset/*.jsonl
+!dataset/test/images/
+!dataset/test/metadata.jsonl
+
+# Secrets — never commit
+.env
+*.token
+hf_token.txt
+
+# Editor/OS
+.DS_Store
+.vscode/
+.idea/
+
+# Jupyter
+.ipynb_checkpoints/

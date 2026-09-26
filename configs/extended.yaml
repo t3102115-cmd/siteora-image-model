@@ -1,0 +1,42 @@
+# EXTENDED config — longer training / larger dataset for experimenting
+# with maximum achievable quality. Feasibility on a single T4 has NOT
+# been tested (Colab session length limits may require multiple resumed
+# sessions). Treat all numbers here as a starting point, not a promise.
+name: extended
+
+model:
+  base_model: "stabilityai/stable-diffusion-xl-base-1.0"
+  resolution: 1024
+
+lora:
+  rank: 32
+  alpha: 32
+  dropout: 0.05
+  target_modules: ["to_k", "to_q", "to_v", "to_out.0"]
+
+training:
+  learning_rate: 5.0e-5
+  batch_size: 1
+  gradient_accumulation_steps: 8
+  max_train_steps: 8000
+  save_every: 500
+  eval_every: 500
+  mixed_precision: fp16
+  gradient_checkpointing: true
+  use_8bit_adam: true
+  lr_scheduler: cosine
+  lr_warmup_steps: 200
+  seed: 42
+  dataloader_num_workers: 2
+
+dataset:
+  train_dir: "dataset"
+  metadata_file: "metadata.jsonl"
+  val_split: 0.05
+
+paths:
+  output_dir: "outputs/extended"
+  checkpoint_dir: "checkpoints/extended"
+  lora_dir: "models/siteora-lora-extended"
+  sample_dir: "samples/extended"
+  log_dir: "logs/extended"

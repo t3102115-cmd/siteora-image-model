@@ -1,0 +1,42 @@
+# STANDARD config — a reasonable Colab T4 run intended to produce a
+# genuinely useful Siteora LoRA. Expected to take a few hours on a T4
+# for a dataset of a few hundred to ~1500 images (NOT measured yet —
+# see README "Tested vs Expected" section).
+name: standard
+
+model:
+  base_model: "stabilityai/stable-diffusion-xl-base-1.0"
+  resolution: 1024
+
+lora:
+  rank: 16
+  alpha: 16
+  dropout: 0.0
+  target_modules: ["to_k", "to_q", "to_v", "to_out.0"]
+
+training:
+  learning_rate: 1.0e-4
+  batch_size: 1
+  gradient_accumulation_steps: 4
+  max_train_steps: 3000
+  save_every: 250
+  eval_every: 250
+  mixed_precision: fp16
+  gradient_checkpointing: true
+  use_8bit_adam: true
+  lr_scheduler: cosine
+  lr_warmup_steps: 100
+  seed: 42
+  dataloader_num_workers: 2
+
+dataset:
+  train_dir: "dataset"
+  metadata_file: "metadata.jsonl"
+  val_split: 0.05
+
+paths:
+  output_dir: "outputs/standard"
+  checkpoint_dir: "checkpoints/standard"
+  lora_dir: "models/siteora-lora-standard"
+  sample_dir: "samples/standard"
+  log_dir: "logs/standard"

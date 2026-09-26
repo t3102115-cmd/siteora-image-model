@@ -1,0 +1,40 @@
+# TEST config — verifies the entire pipeline end-to-end on a tiny dataset.
+# Not meant to produce a useful LoRA. Runtime target: a few minutes on a T4.
+name: test
+
+model:
+  base_model: "stabilityai/stable-diffusion-xl-base-1.0"
+  resolution: 512
+
+lora:
+  rank: 4
+  alpha: 4
+  dropout: 0.0
+  target_modules: ["to_k", "to_q", "to_v", "to_out.0"]
+
+training:
+  learning_rate: 1.0e-4
+  batch_size: 1
+  gradient_accumulation_steps: 1
+  max_train_steps: 20
+  save_every: 10
+  eval_every: 10
+  mixed_precision: fp16
+  gradient_checkpointing: true
+  use_8bit_adam: true
+  lr_scheduler: constant
+  lr_warmup_steps: 0
+  seed: 42
+  dataloader_num_workers: 0
+
+dataset:
+  train_dir: "dataset/test"
+  metadata_file: "metadata.jsonl"
+  val_split: 0.2
+
+paths:
+  output_dir: "outputs/test"
+  checkpoint_dir: "checkpoints/test"
+  lora_dir: "models/siteora-lora-test"
+  sample_dir: "samples/test"
+  log_dir: "logs/test"
