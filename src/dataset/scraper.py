@@ -22,22 +22,20 @@ from __future__ import annotations
 
 import argparse
 import json
-import logging
 import os
 import time
 from pathlib import Path
 
 import requests
 
-logger = logging.getLogger("siteora.scraper")
-if not logger.handlers:
-    # Configured here (not left to the caller) so `verbose=True` produces
-    # visible output in a plain Colab cell without the user having to know
-    # to call logging.basicConfig() themselves first.
-    _handler = logging.StreamHandler()
-    _handler.setFormatter(logging.Formatter("[scraper] %(message)s"))
-    logger.addHandler(_handler)
-    logger.propagate = False
+
+def _log(msg: str) -> None:
+    # Plain print(), not the `logging` module: Jupyter/Colab cell output
+    # capture and stale cached module imports make `logging` handlers
+    # unreliable to see live in a notebook. print(flush=True) always shows
+    # up immediately in a cell, no configuration required.
+    print(f"[scraper] {msg}", flush=True)
+
 
 PEXELS_API_URL = "https://api.pexels.com/v1/search"
 
@@ -107,16 +105,13 @@ def scrape_pexels(
       (e.g. because most results on each page are already-scraped
       duplicates) — bounds worst-case API calls when re-running against a
       near-exhausted query, rather than paging until Pexels returns empty.
-    - With `verbose=True` (the default), logs progress per query/page/image
+    - With `verbose=True` (the default), prints progress per query/page/image
       and download failures, so a long-running scrape isn't a silent black
       box in a Colab cell. Set `verbose=False` for quiet/scripted use.
 
     Returns the number of NEW images added.
     """
-    if verbose:
-        logger.setLevel(logging.INFO)
-    else:
-        logger.setLevel(logging.WARNING)
+    log = _log if verbose else (lambda msg: None)
 
     api_key = api_key or os.environ.get("PEXELS_API_KEY")
     if not api_key:
@@ -133,7 +128,7 @@ def scrape_pexels(
     metadata_path = dataset_dir / metadata_file
     license_path = dataset_dir / license_manifest_file
     existing_ids = _load_existing_ids(license_path)
-    logger.info("Starting scrape: %d quer(y/ies), %d images/query, %d already in dataset", len(queries), per_query, len(existing_ids))
+    log(f"Starting scrape: {len(queries)} quer(y/ies), {per_query} images/query, {len(existing_ids)} already in dataset")
 
     new_records: list[dict] = []
     new_license_entries: list[dict] = []
@@ -142,12 +137,12 @@ def scrape_pexels(
     headers = {"Authorization": api_key}
 
     for query_idx, (query, template) in enumerate(queries.items(), 1):
-        logger.info("[%d/%d] query='%s': searching...", query_idx, len(queries), query)
+        log(f"[{query_idx}/{len(queries)}] query='{query}': searching...")
         page = 1
         collected = 0
         query_duplicates = 0
         while collected < per_query and page <= max_pages:
-            logger.info("  page %d (have %d/%d for this query)", page, collected, per_query)
+            log(f"  page {page} (have {collected}/{per_query} for this query)")
             try:
                 resp = requests.get(
                     PEXELS_API_URL,
@@ -162,12 +157,12 @@ def scrape_pexels(
                 )
                 resp.raise_for_status()
             except requests.RequestException as e:
-                logger.warning("  search request failed on page %d: %s — stopping this query", page, e)
+                log(f"  search request failed on page {page}: {e} — stopping this query")
                 break
 
             photos = resp.json().get("photos", [])
             if not photos:
-                logger.info("  no more results for '%s'", query)
+                log(f"  no more results for '{query}'")
                 break
 
             for photo in photos:
@@ -183,7 +178,7 @@ def scrape_pexels(
                     img_bytes = requests.get(photo["src"]["large2x"], timeout=30).content
                 except requests.RequestException as e:
                     failed_downloads += 1
-                    logger.warning("  failed to download photo %s: %s — skipping", photo_id, e)
+                    log(f"  failed to download photo {photo_id}: {e} — skipping")
                     continue
 
                 file_name = f"pexels_{photo_id}.jpg"
@@ -203,18 +198,18 @@ def scrape_pexels(
                 )
                 existing_ids.add(photo_id)
                 collected += 1
-                logger.info("  saved %s (%d/%d)", file_name, collected, per_query)
+                log(f"  saved {file_name} ({collected}/{per_query})")
                 time.sleep(request_delay_s)
 
             page += 1
 
         if page > max_pages and collected < per_query:
-            logger.warning(
-                "  query '%s' stopped at max_pages=%d with only %d/%d new images "
-                "(saw %d duplicates) — try a different query or raise max_pages",
-                query, max_pages, collected, per_query, query_duplicates,
+            log(
+                f"  WARNING: query '{query}' stopped at max_pages={max_pages} with only "
+                f"{collected}/{per_query} new images (saw {query_duplicates} duplicates) — "
+                f"try a different query or raise max_pages"
             )
-        logger.info("[%d/%d] query='%s' done: %d new images", query_idx, len(queries), query, collected)
+        log(f"[{query_idx}/{len(queries)}] query='{query}' done: {collected} new images")
 
     if new_records:
         with open(metadata_path, "a") as f:
@@ -224,9 +219,9 @@ def scrape_pexels(
             for entry in new_license_entries:
                 f.write(json.dumps(entry) + "\n")
 
-    logger.info(
-        "Done: %d new images added, %d duplicates skipped, %d downloads failed. Total in dataset: %d",
-        len(new_records), skipped_duplicates, failed_downloads, len(existing_ids),
+    log(
+        f"Done: {len(new_records)} new images added, {skipped_duplicates} duplicates skipped, "
+        f"{failed_downloads} downloads failed. Total in dataset: {len(existing_ids)}"
     )
     return len(new_records)
 
