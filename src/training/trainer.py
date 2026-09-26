@@ -159,11 +159,15 @@ def _encode_prompt_sd15(components: TrainingComponents, prompts: list[str], devi
 
 def training_step(components: TrainingComponents, batch: dict, device, weight_dtype) -> torch.Tensor:
     """One forward pass + loss computation. Shared by smoke test and trainer."""
-    pixel_values = batch["pixel_values"].to(device, dtype=weight_dtype)
+    # VAE is kept in fp32 for numerical stability (standard SDXL practice), so its
+    # input must be fp32 too; the resulting latents are cast to weight_dtype
+    # afterward for the UNet forward pass.
+    pixel_values = batch["pixel_values"].to(device, dtype=torch.float32)
 
     with torch.no_grad():
         latents = components.vae.encode(pixel_values).latent_dist.sample()
         latents = latents * components.vae.config.scaling_factor
+    latents = latents.to(weight_dtype)
 
     noise = torch.randn_like(latents)
     bsz = latents.shape[0]
