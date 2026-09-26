@@ -21,6 +21,7 @@ pillow>=10.0
 numpy>=1.26
 tqdm>=4.66
 tensorboard>=2.16
+requests>=2.31   # dataset scraper (src/dataset/scraper.py)
 
 # TPU path (only installed/used when a TPU runtime is detected; see
 # colab/train_lora.ipynb Cell 1 which installs this conditionally).

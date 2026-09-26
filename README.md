@@ -101,6 +101,26 @@ No training images are bundled with this repo (see dataset/README.md's licensing
 note) except tiny procedurally-generated solid-color images under `dataset/test/`,
 used purely for the automated pipeline smoke test.
 
+### Scraping a starter dataset
+
+`src/dataset/scraper.py` pulls images from the [Pexels API](https://www.pexels.com/api/)
+— **not** a generic web scraper. Pexels' license (verified 2026-09-26) explicitly
+permits free commercial use and modification with no attribution required, which
+matters because these images become training data for a commercial LoRA; scraping
+arbitrary websites would pull in images of unknown or likely-prohibited license, so
+that was deliberately not built. Requires a free API key from pexels.com/api:
+
+```python
+from dataset.scraper import scrape_pexels
+scrape_pexels(per_query=30, dataset_dir="dataset")  # reads PEXELS_API_KEY env var
+```
+
+It appends to `metadata.jsonl` (never overwrites), dedupes by Pexels photo ID so
+reruns are safe, and writes a per-image `license_manifest.jsonl` for your own
+record-keeping. Captions are template-generated from the search category + Pexels'
+own alt-text — review them (`dataset.captions.review_captions`) before a real
+training run, same as any other caption source. See `colab/dataset.ipynb` Cell 0.
+
 ### Captions
 
 Write full sentences covering subject, style, environment, lighting, and composition.
@@ -186,12 +206,24 @@ by a person looking at the images, not fabricated by a metric.
 ## Model export & versioning
 
 `unet.save_lora_adapter(lora_dir)` (called at the end of `training.trainer.train()`)
-exports **only the LoRA adapter**, not the base model — a few MB to tens of MB,
-depending on rank, not gigabytes. Metadata to record alongside a release (not yet
-automated — do this manually until an integration task adds it): base model + version,
-LoRA rank, training resolution, dataset version, training steps, learning rate, date,
-and the versions in `requirements.txt`. Suggested version naming:
-`siteora-image-v0.1`, `v0.2`, `v1.0`, matching the project's phase.
+exports **only the LoRA adapter** as `pytorch_lora_weights.safetensors` — a few MB to
+tens of MB depending on rank, not gigabytes — already in safetensors format.
+
+`src/training/export.py::export_lora()` packages that file into a versioned,
+distributable folder with a `metadata.json` recording base model, LoRA rank/alpha,
+training resolution, steps, learning rate, dataset size, export timestamp, and
+installed software versions — so a `.safetensors` file is never floating around
+without a record of how it was produced:
+
+```python
+from training.export import export_lora
+export_dir = export_lora(lora_dir, config, version="v0.1", dest_dir="models/export")
+# -> models/export/v0.1/siteora_lora_v0.1.safetensors + metadata.json
+```
+
+It validates the source file actually loads and is non-empty before calling the
+export a success — never silently produces an empty package. See `colab/train_lora.ipynb`
+Cell 14. Suggested version naming: `v0.1`, `v0.2`, `v1.0`, matching the project's phase.
 
 ## Project structure
 
