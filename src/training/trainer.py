@@ -221,6 +221,7 @@ def training_step(components: TrainingComponents, batch: dict, device, weight_dt
 
 
 def build_dataloaders(config: SiteoraConfig) -> tuple[DataLoader, DataLoader | None]:
+    print(f"[train] loading dataset from {config.dataset.train_dir} ...", flush=True)
     dataset = SiteoraImageCaptionDataset(
         dataset_dir=config.dataset.train_dir,
         metadata_file=config.dataset.metadata_file,
@@ -228,6 +229,7 @@ def build_dataloaders(config: SiteoraConfig) -> tuple[DataLoader, DataLoader | N
         image_column=config.dataset.image_column,
         caption_column=config.dataset.caption_column,
     )
+    print(f"[train] dataset has {len(dataset)} image(s)", flush=True)
     if config.dataset.val_split > 0 and len(dataset) > 1:
         n_val = max(1, int(len(dataset) * config.dataset.val_split))
         n_train = len(dataset) - n_val
@@ -237,22 +239,37 @@ def build_dataloaders(config: SiteoraConfig) -> tuple[DataLoader, DataLoader | N
     else:
         train_set, val_set = dataset, None
 
+    # IMPORTANT: num_workers > 0 spawns worker processes via fork() on Linux.
+    # By the time this is called, the base model is already on the GPU (CUDA
+    # is initialized in this process) -- forking after CUDA init deadlocks
+    # silently (the classic "DataLoader hangs forever, no error" symptom).
+    # Multi-process loading isn't worth that risk for LoRA-sized datasets, so
+    # it's forced to 0 here regardless of what the config asks for.
+    if config.training.dataloader_num_workers > 0:
+        print(
+            f"[train] config asked for dataloader_num_workers="
+            f"{config.training.dataloader_num_workers}, but forcing 0 -- "
+            f"workers forked after CUDA init can deadlock silently",
+            flush=True,
+        )
     train_loader = DataLoader(
         train_set,
         batch_size=config.training.batch_size,
         shuffle=True,
         collate_fn=collate_fn,
-        num_workers=config.training.dataloader_num_workers,
+        num_workers=0,
     )
     val_loader = (
         DataLoader(val_set, batch_size=config.training.batch_size, shuffle=False, collate_fn=collate_fn)
         if val_set is not None
         else None
     )
+    print(f"[train] dataloader ready: {len(train_loader)} batch(es)/epoch", flush=True)
     return train_loader, val_loader
 
 
 def train(config: SiteoraConfig, resume: bool = True) -> Path:
+    print("[train] validating config...", flush=True)
     config.validate()
     accel_info = detect_accelerator()
 
@@ -274,9 +291,12 @@ def train(config: SiteoraConfig, resume: bool = True) -> Path:
 
     # Load text encoders + UNet directly at weight_dtype (see load_base_model's
     # docstring for why this matters on a 16GB T4) — only the VAE is always fp32.
+    print(f"[train] loading base model {config.model.base_model} (dtype={weight_dtype})...", flush=True)
     components = load_base_model(config, accel_info, dtype=weight_dtype)
+    print("[train] base model loaded, attaching LoRA...", flush=True)
     components.unet = attach_lora(components.unet, config)
 
+    print(f"[train] moving components to {accelerator.device}...", flush=True)
     components.vae.to(accelerator.device, dtype=torch.float32)  # VAE stays fp32 for stability
     components.text_encoder_one.to(accelerator.device)
     if components.text_encoder_two is not None:
@@ -294,6 +314,7 @@ def train(config: SiteoraConfig, resume: bool = True) -> Path:
     trainable_count, total_count = count_parameters(components.unet)
 
     use_8bit = config.training.use_8bit_adam and accel_info.kind == "cuda"
+    print(f"[train] creating optimizer (8-bit={use_8bit})...", flush=True)
     if use_8bit:
         import bitsandbytes as bnb
 
@@ -314,13 +335,16 @@ def train(config: SiteoraConfig, resume: bool = True) -> Path:
         num_training_steps=config.training.max_train_steps,
     )
 
+    print("[train] calling accelerator.prepare()...", flush=True)
     components.unet, optimizer, train_loader, lr_scheduler = accelerator.prepare(
         components.unet, optimizer, train_loader, lr_scheduler
     )
+    print("[train] accelerator.prepare() done", flush=True)
 
     start_step = 0
     checkpoint_dir = Path(config.paths.checkpoint_dir)
     if resume:
+        print(f"[train] checking for existing checkpoint in {checkpoint_dir}...", flush=True)
         latest = checkpointing.find_latest_checkpoint(checkpoint_dir)
         if latest is not None:
             state = checkpointing.load_checkpoint(latest, optimizer=optimizer, lr_scheduler=lr_scheduler)
@@ -329,7 +353,9 @@ def train(config: SiteoraConfig, resume: bool = True) -> Path:
 
             set_peft_model_state_dict(unwrapped, state["unet_lora_state_dict"])
             start_step = state["step"]
-            print(f"Resumed from checkpoint {latest} at step {start_step}")
+            print(f"[train] resumed from checkpoint {latest} at step {start_step}", flush=True)
+        else:
+            print("[train] no existing checkpoint found, starting from step 0", flush=True)
 
     print("=" * 60)
     print(f"GPU/Accelerator: {accel_info.name}")
@@ -345,14 +371,23 @@ def train(config: SiteoraConfig, resume: bool = True) -> Path:
 
     global_step = start_step
     t_start = time.time()
+    t_last_step = t_start
     components.unet.train()
 
     progress_target = config.training.max_train_steps
+    print(
+        f"[train] entering training loop: step {global_step} -> {progress_target} "
+        f"({progress_target - global_step} steps to go)",
+        flush=True,
+    )
     data_iter = iter(train_loader)
+
+    print("[train] fetching first batch...", flush=True)
     while global_step < progress_target:
         try:
             batch = next(data_iter)
         except StopIteration:
+            print("[train] dataset exhausted, starting a new pass over it", flush=True)
             data_iter = iter(train_loader)
             batch = next(data_iter)
 
@@ -367,10 +402,26 @@ def train(config: SiteoraConfig, resume: bool = True) -> Path:
 
         if accelerator.sync_gradients:
             global_step += 1
-            elapsed = time.time() - t_start
+            now = time.time()
+            step_time = now - t_last_step
+            t_last_step = now
+            elapsed = now - t_start
+            avg_step_time = elapsed / max(1, global_step - start_step)
+            eta_s = avg_step_time * (progress_target - global_step)
             accelerator.log({"train_loss": loss.detach().item(), "lr": lr_scheduler.get_last_lr()[0]}, step=global_step)
 
+            # Every single step, not just at save points -- this is what
+            # actually fixes "looks stuck": a 250-step save_every interval on
+            # a slow T4 step could be many minutes of total silence otherwise.
+            print(
+                f"[train] step {global_step}/{progress_target}  loss={loss.item():.4f}  "
+                f"step_time={step_time:.2f}s  avg={avg_step_time:.2f}s/step  "
+                f"elapsed={elapsed/60:.1f}min  eta={eta_s/60:.1f}min",
+                flush=True,
+            )
+
             if global_step % max(1, config.training.save_every) == 0 or global_step == progress_target:
+                print(f"[train] saving checkpoint at step {global_step}...", flush=True)
                 unwrapped = accelerator.unwrap_model(components.unet)
                 lora_state_dict = get_peft_model_state_dict(unwrapped)
                 checkpointing.save_checkpoint(
@@ -382,7 +433,9 @@ def train(config: SiteoraConfig, resume: bool = True) -> Path:
                     dataclasses.asdict(config) if dataclasses.is_dataclass(config) else {},
                 )
                 checkpointing.sync_to_drive(checkpoint_dir, config.paths.drive_root)
-                print(f"step {global_step}/{progress_target}  loss={loss.item():.4f}  elapsed={elapsed:.1f}s")
+                print(f"[train] checkpoint saved: {checkpoint_dir}/step-{global_step:07d}", flush=True)
+
+    print(f"[train] training loop finished at step {global_step}, exporting LoRA...", flush=True)
 
     lora_dir = Path(config.paths.lora_dir)
     lora_dir.mkdir(parents=True, exist_ok=True)
