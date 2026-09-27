@@ -10,7 +10,7 @@ import dataclasses
 from pathlib import Path
 
 import torch
-from diffusers import StableDiffusionXLPipeline
+from diffusers import DPMSolverMultistepScheduler, StableDiffusionXLPipeline
 from PIL import Image
 
 
@@ -43,15 +43,41 @@ class SiteoraImageGenerator:
         lora_path: str | None = None,
         device: str | None = None,
         dtype: torch.dtype | None = None,
+        scheduler: str = "euler",
+        num_threads: int | None = None,
     ):
+        """
+        scheduler: "euler" (SDXL's default, needs ~30-50 steps for good quality)
+            or "dpm++" (DPMSolverMultistepScheduler with Karras sigmas, reaches
+            comparable quality in ~15-20 steps -- meaningfully faster on CPU,
+            where every step is expensive). Not benchmarked against each other
+            in this repo; "dpm++ needs fewer steps" is standard, widely-used
+            diffusion sampling knowledge, not a measurement made here.
+        num_threads: for CPU inference, pins PyTorch's intra-op thread count
+            to the deployment machine's actual CPU core count (torch's
+            default can over- or under-subscribe on a VPS with an unusual
+            core count). Ignored on CUDA.
+        """
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
         if dtype is None:
+            # fp16 has no real speed benefit on CPU (most CPUs lack fast fp16
+            # kernels and diffusers/torch often upcast anyway) and can even be
+            # slower than fp32 -- only use fp16 on CUDA.
             dtype = torch.float16 if device == "cuda" else torch.float32
+
+        if device == "cpu" and num_threads is not None:
+            torch.set_num_threads(num_threads)
 
         self.device = device
         self.dtype = dtype
         self.pipe = StableDiffusionXLPipeline.from_pretrained(base_model, dtype=dtype)
+        if scheduler == "dpm++":
+            self.pipe.scheduler = DPMSolverMultistepScheduler.from_config(
+                self.pipe.scheduler.config, use_karras_sigmas=True
+            )
+        elif scheduler != "euler":
+            raise ValueError(f"unknown scheduler '{scheduler}', expected 'euler' or 'dpm++'")
         self.pipe.to(device)
         self.lora_loaded = False
 
